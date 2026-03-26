@@ -3,7 +3,7 @@ if (window.__autoformsAI) {
     // Already running — do nothing
 } else {
 window.__autoformsAI = true;
-console.log("✅ AutoForms AI content.js v2 loaded");
+console.log("✅ AutoForms AI content.js v3 loaded");
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -24,13 +24,11 @@ function getFieldKey(el) {
         for (const label of el.labels) parts.push(label.innerText || "");
     }
 
-    // Google Forms pattern: walk up until we find a container with data-params
-    // The container's first line of innerText is the question label
+    // Google Forms: container with data-params, first line = question label
     let node = el.parentElement;
     let googleFormsLabelFound = false;
     while (node && node !== document.body) {
         if (node.getAttribute("data-params")) {
-            // First line of innerText = question label (e.g. "Full Name")
             const firstLine = node.innerText?.split("\n")[0]?.trim() || "";
             if (firstLine) parts.push(firstLine);
             googleFormsLabelFound = true;
@@ -40,16 +38,17 @@ function getFieldKey(el) {
     }
 
     // Standard DOM walk for non-Google-Forms sites
+    // IMPORTANT: only use direct text nodes + explicit labels — never full innerText
+    // (full innerText includes sibling fields causing "name" to bleed into phone/email)
     if (!googleFormsLabelFound) {
         let node2 = el.parentElement;
         let depth = 0;
         while (node2 && node2 !== document.body && depth < 6) {
-            // Only grab label/legend/heading text — NOT full innerText of containers
-            // (innerText includes ALL descendants which causes sibling field bleed)
+            // Only explicit label/legend/heading elements
             node2.querySelectorAll("label, legend, [role=heading], h1, h2, h3, h4, h5, h6").forEach(h => {
                 if (!h.contains(el)) parts.push(h.innerText?.slice(0, 60) || "");
             });
-            // Only direct text nodes of this element (not descendants)
+            // Only direct text nodes (nodeType 3) — not descendant text
             const ownText = [...node2.childNodes]
                 .filter(n => n.nodeType === 3)
                 .map(n => n.textContent.trim())
@@ -59,7 +58,7 @@ function getFieldKey(el) {
             node2 = node2.parentElement;
             depth++;
         }
-        // Previous sibling text — only 1 level up, short slice
+        // Previous sibling — 1 level only
         const directParent = el.parentElement;
         if (directParent) {
             const prev = directParent.previousElementSibling;
@@ -97,48 +96,78 @@ function fill(el, value) {
 }
 
 // ─── Field value resolver ─────────────────────────────────────────────────────
+// RULE: specific field types (email, phone, address...) are checked FIRST.
+// Generic "name" is checked LAST with an exclusion list to prevent bleed.
 
 function resolveValue(key, type, data) {
-    if (matches(key, "your name", "full name", "name") && !matches(key, "email", "phone", "mobile", "tel", "contact", "company", "college", "university", "instruction", "skill", "summary", "linkedin", "github")) return data.name;
-    if (matches(key, "full name", "your name", "applicant name", "candidate name")) return data.name;
-    if (matches(key, "first name", "given name", "fname")) return data.name?.split(" ")[0] || "";
+
+    // ── Strongest signals first — input type attribute ────────────────
+    if (type === "email") return data.email;
+    if (type === "tel")   return data.phone;
+    if (type === "url")   return data.portfolio || data.github;
+
+    // ── Contact ───────────────────────────────────────────────────────
+    if (matches(key, "email", "e-mail", "mail id", "custemail"))                                          return data.email;
+    if (matches(key, "telephone", "tel no", "phone", "mobile", "contact no", "cell", "whatsapp", "custtel")) return data.phone;
+
+    // ── Specific name variants (before generic "name") ────────────────
+    if (matches(key, "first name", "given name", "fname"))   return data.name?.split(" ")[0] || "";
     if (matches(key, "last name", "surname", "family name", "lname")) return data.name?.split(" ").slice(1).join(" ") || "";
-    if (matches(key, "middle name")) return "";
-    // Check contact fields BEFORE generic "name" to avoid "customer name" bleeding into phone/email
-    if (matches(key, "email", "e-mail", "mail id") || type === "email") return data.email;
-    if (matches(key, "phone", "mobile", "contact no", "cell", "whatsapp", "telephone", "tel no") || type === "tel") return data.phone;
-    if (matches(key, "address", "street", "residence")) return data.address;
-    if (matches(key, "city", "town", "current city", "current location", "your city", "location")) return data.city || data.address;
-    if (matches(key, "state", "province", "region")) return data.state;
-    if (matches(key, "country")) return data.country || "India";
+    if (matches(key, "middle name"))                         return "";
+    if (matches(key, "full name", "your name", "applicant name", "candidate name", "customer name", "custname")) return data.name;
+
+    // ── Location ──────────────────────────────────────────────────────
+    if (matches(key, "address", "street", "residence"))      return data.address;
+    if (matches(key, "city", "town", "current city", "current location", "your city")) return data.city || data.address;
+    if (matches(key, "state", "province", "region"))         return data.state;
+    if (matches(key, "country"))                             return data.country || "India";
     if (matches(key, "pincode", "pin code", "postal", "zip")) return data.pincode;
-    if (matches(key, "linkedin")) return data.linkedin;
-    if (matches(key, "github")) return data.github;
-    if (matches(key, "portfolio", "website", "personal site", "blog") || type === "url") return data.portfolio || data.github;
-    if (matches(key, "twitter")) return data.twitter || "";
-    if (matches(key, "college", "university", "institution", "school", "alma mater")) return data.college;
+
+    // ── Social ────────────────────────────────────────────────────────
+    if (matches(key, "linkedin"))  return data.linkedin;
+    if (matches(key, "github"))    return data.github;
+    if (matches(key, "portfolio", "website", "personal site", "blog")) return data.portfolio || data.github;
+    if (matches(key, "twitter"))   return data.twitter || "";
+
+    // ── Education ─────────────────────────────────────────────────────
+    if (matches(key, "college", "university", "institution", "alma mater")) return data.college;
     if (matches(key, "degree", "qualification", "programme", "program", "course")) return data.degree;
     if (matches(key, "branch", "specialization", "major", "stream", "department")) return data.branch || data.degree;
     if (matches(key, "graduation year", "grad year", "pass out", "batch", "passing year", "year of graduation", "year of passing")) return data.graduation_year;
     if (matches(key, "cgpa", "gpa", "percentage", "marks", "aggregate")) return data.gpa;
-    if (matches(key, "10th", "tenth", "ssc")) return data.tenth_percentage;
+    if (matches(key, "10th", "tenth", "ssc"))                return data.tenth_percentage;
     if (matches(key, "12th", "twelfth", "hsc", "intermediate")) return data.twelfth_percentage;
+
+    // ── Work ──────────────────────────────────────────────────────────
     if (matches(key, "company", "employer", "organisation", "organization", "current company")) return data.current_company;
     if (matches(key, "designation", "job title", "current role", "position")) return data.current_role;
     if (matches(key, "years of experience", "total experience", "work experience", "experience in years")) return data.experience_years;
-    if (matches(key, "notice period")) return data.notice_period || "Immediate";
-    if (matches(key, "current salary", "current ctc")) return data.current_ctc;
-    if (matches(key, "expected salary", "expected ctc")) return data.expected_ctc;
-    if (matches(key, "skill")) return Array.isArray(data.skills) ? data.skills.join(", ") : data.skills;
+    if (matches(key, "notice period"))                       return data.notice_period || "Immediate";
+    if (matches(key, "current salary", "current ctc"))       return data.current_ctc;
+    if (matches(key, "expected salary", "expected ctc"))     return data.expected_ctc;
+
+    // ── Skills / summary ──────────────────────────────────────────────
+    if (matches(key, "skill"))  return Array.isArray(data.skills) ? data.skills.join(", ") : data.skills;
     if (matches(key, "summary", "objective", "profile", "about yourself", "about you", "bio")) return data.summary || data.experience;
     if (matches(key, "cover letter", "cover note", "motivation letter", "letter of intent")) return data.cover_letter || "";
-    if (matches(key, "instruction", "delivery note", "special request", "comments", "message", "anything else", "additional info")) return "Please leave at the door. Thank you!";
-    if (matches(key, "date of birth", "dob", "birth date")) return data.dob;
-    if (matches(key, "gender", "sex")) return data.gender;
-    if (matches(key, "nationality")) return data.nationality || "Indian";
-    if (matches(key, "language")) return data.languages || "English, Hindi";
-    // "name" is checked LAST — only if no other field matched
-    // Also require the key to start with or prominently feature "name"
+    if (matches(key, "instruction", "delivery note", "special request", "comments", "anything else", "additional info")) return "Please leave at the door. Thank you!";
+
+    // ── Personal ──────────────────────────────────────────────────────
+    if (matches(key, "date of birth", "dob", "birth date"))  return data.dob;
+    if (matches(key, "gender", "sex"))                       return data.gender;
+    if (matches(key, "nationality"))                         return data.nationality || "Indian";
+    if (matches(key, "language"))                            return data.languages || "English, Hindi";
+
+    // ── Generic "name" — LAST RESORT ─────────────────────────────────
+    // Only fires if nothing above matched AND key has "name" but no conflicting signals
+    if (matches(key, "name") &&
+        !matches(key, "email", "phone", "mobile", "tel", "contact", "whatsapp",
+                       "company", "college", "university", "school", "instruction",
+                       "skill", "summary", "linkedin", "github", "portfolio",
+                       "country", "city", "state", "address")) {
+        return data.name;
+    }
+
     return null;
 }
 
@@ -255,6 +284,61 @@ function handleGenderButtons(data) {
     return 0;
 }
 
+// ─── Language button handler ──────────────────────────────────────────────────
+
+function handleLanguageButtons(data) {
+    if (!data.languages) return 0;
+    const userLangs = data.languages.toLowerCase().split(/[,\/]/).map(l => l.trim());
+    let clicked = 0;
+    let langSection = null;
+    document.querySelectorAll("*").forEach(el => {
+        const text = el.innerText?.trim().toLowerCase();
+        if ((text === "languages you know" || text === "languages") && el.children.length < 5) {
+            langSection = el.closest("section, div, form") || el.parentElement?.parentElement;
+        }
+    });
+    const btns = langSection
+        ? [...langSection.querySelectorAll("button, [role=button]")]
+        : [...document.querySelectorAll("button, [role=button]")];
+    btns.forEach(btn => {
+        const label = btn.innerText?.toLowerCase().replace(/[^a-z]/g, "").trim();
+        if (!label || label.includes("add")) return;
+        if (userLangs.some(lang => lang.replace(/[^a-z]/g, "") === label || label.includes(lang.replace(/[^a-z]/g, "")))) {
+            const isSelected = btn.getAttribute("aria-selected") === "true" || btn.classList.contains("active") || btn.classList.contains("selected");
+            if (!isSelected) { btn.click(); clicked++; }
+        }
+    });
+    return clicked;
+}
+
+// ─── Type button handler ──────────────────────────────────────────────────────
+
+function handleTypeButtons(data) {
+    const expYears = parseFloat(data.experience_years) || 0;
+    const targetType = expYears > 0 ? "working professional" : "fresher";
+    let typeSection = null;
+    document.querySelectorAll("*").forEach(el => {
+        const text = el.innerText?.trim().toLowerCase();
+        if (text === "type" && el.children.length < 5) {
+            typeSection = el.closest("section, div, form") || el.parentElement?.parentElement;
+        }
+    });
+    const btns = typeSection
+        ? [...typeSection.querySelectorAll("button, [role=button]")]
+        : [...document.querySelectorAll("button, [role=button]")];
+    const typeOptions = ["college student", "fresher", "working professional", "school student", "woman returning to work"];
+    for (const btn of btns) {
+        const label = btn.innerText?.toLowerCase().trim();
+        if (!typeOptions.includes(label)) continue;
+        const isSelected = btn.getAttribute("aria-selected") === "true" || btn.classList.contains("active") || btn.classList.contains("selected");
+        if (isSelected) return 0;
+        if (label.includes(targetType) || (targetType === "fresher" && label === "college student")) {
+            btn.click(); return 1;
+        }
+    }
+    return 0;
+}
+
 // ─── Range slider handler ─────────────────────────────────────────────────────
 
 function handleRangeSliders(data) {
@@ -302,92 +386,6 @@ function handleSplitPhone(data) {
         }
     });
     return filled;
-}
-
-// ─── Language button handler (Internshala tag-style buttons) ─────────────────
-
-function handleLanguageButtons(data) {
-    if (!data.languages) return 0;
-    const userLangs = data.languages.toLowerCase().split(/[,\/]/).map(l => l.trim());
-    let clicked = 0;
-
-    // Find all tag-style language buttons by looking for a parent section
-    // labeled "Languages you know" or similar
-    const allBtns = [...document.querySelectorAll("button, [role=button]")];
-
-    // Find the language section container first
-    let langSection = null;
-    document.querySelectorAll("*").forEach(el => {
-        const text = el.innerText?.trim().toLowerCase();
-        if ((text === "languages you know" || text === "languages") && el.children.length < 5) {
-            langSection = el.closest("section, div, form") || el.parentElement?.parentElement;
-        }
-    });
-
-    const btns = langSection
-        ? [...langSection.querySelectorAll("button, [role=button]")]
-        : allBtns;
-
-    btns.forEach(btn => {
-        const label = btn.innerText?.toLowerCase().replace(/[^a-z]/g, "").trim();
-        if (!label || label === "addmorelanguages" || label.includes("add")) return;
-        if (userLangs.some(lang => lang.replace(/[^a-z]/g, "") === label || label.includes(lang.replace(/[^a-z]/g, "")))) {
-            // Only click if not already selected (check aria-selected or active class)
-            const isSelected = btn.getAttribute("aria-selected") === "true"
-                || btn.classList.contains("active")
-                || btn.classList.contains("selected")
-                || btn.getAttribute("data-selected") === "true";
-            if (!isSelected) { btn.click(); clicked++; }
-        }
-    });
-    return clicked;
-}
-
-// ─── Type / profile button handler (College student, Fresher, etc.) ───────────
-
-function handleTypeButtons(data) {
-    // Map user's profile to the best matching type button
-    const expYears = parseFloat(data.experience_years) || 0;
-    let targetType = null;
-
-    if (expYears === 0 || !data.experience_years) {
-        targetType = "fresher"; // or "college student"
-    } else if (expYears > 0) {
-        targetType = "working professional";
-    }
-
-    if (!targetType) return 0;
-
-    // Find the "Type" section
-    let typeSection = null;
-    document.querySelectorAll("*").forEach(el => {
-        const text = el.innerText?.trim().toLowerCase();
-        if (text === "type" && el.children.length < 5) {
-            typeSection = el.closest("section, div, form") || el.parentElement?.parentElement;
-        }
-    });
-
-    const btns = typeSection
-        ? [...typeSection.querySelectorAll("button, [role=button]")]
-        : [...document.querySelectorAll("button, [role=button]")];
-
-    const typeOptions = ["college student", "fresher", "working professional", "school student", "woman returning to work"];
-
-    for (const btn of btns) {
-        const label = btn.innerText?.toLowerCase().trim();
-        if (!typeOptions.includes(label)) continue;
-
-        const isSelected = btn.getAttribute("aria-selected") === "true"
-            || btn.classList.contains("active")
-            || btn.classList.contains("selected");
-        if (isSelected) return 0; // already selected, skip
-
-        if (label.includes(targetType) || (targetType === "fresher" && label === "college student")) {
-            btn.click();
-            return 1;
-        }
-    }
-    return 0;
 }
 
 // ─── Essay detection and AI fill ──────────────────────────────────────────────
