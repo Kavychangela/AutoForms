@@ -95,7 +95,7 @@ function resolveValue(key, type, data) {
     if (type === "url")   return data.portfolio || data.github;
 
     if (matches(key, "email", "e-mail", "mail id", "custemail"))                                               return data.email;
-    if (matches(key, "telephone", "tel no", "phone", "mobile", "contact no", "cell", "whatsapp", "custtel"))  return data.phone;
+    if (matches(key, "telephone", "tel no", "phone", "mobile", "contact no", "cell", "whatsapp", "custtel", "Contact Number"))  return data.phone;
 
     if (matches(key, "first name", "given name", "fname"))                                                     return data.name?.split(" ")[0] || "";
     if (matches(key, "last name", "surname", "family name", "lname"))                                          return data.name?.split(" ").slice(1).join(" ") || "";
