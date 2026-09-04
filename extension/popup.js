@@ -27,7 +27,7 @@ fillBtn.addEventListener("click", async () => {
         const formData = new FormData();
         formData.append("file", file);
 
-        const response = await fetch("http://localhost:8000/parse-resume", {
+        const response = await fetch("https://autoforms-1-x96i.onrender.com/parse-resume", {
             method: "POST",
             body: formData
         });
