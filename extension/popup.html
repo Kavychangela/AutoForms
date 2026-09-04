@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AutoForms AI</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: sans-serif;
+            width: 280px;
+            padding: 16px;
+            background: #ffffff;
+            color: #1a1a1a;
+        }
+
+        h3 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 14px;
+            color: #111;
+        }
+
+        label {
+            display: block;
+            font-size: 13px;
+            color: #555;
+            margin-bottom: 6px;
+        }
+
+        input[type="file"] {
+            display: block;
+            width: 100%;
+            font-size: 13px;
+            margin-bottom: 12px;
+            padding: 6px 0;
+        }
+
+        button {
+            width: 100%;
+            padding: 10px;
+            background: #4f46e5;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        button:hover:not(:disabled) {
+            background: #4338ca;
+        }
+
+        button:disabled {
+            background: #a5b4fc;
+            cursor: not-allowed;
+        }
+
+        .status {
+            margin-top: 10px;
+            font-size: 12px;
+            padding: 8px 10px;
+            border-radius: 6px;
+            min-height: 34px;
+            line-height: 1.4;
+        }
+
+        .status.info {
+            background: #eff6ff;
+            color: #1d4ed8;
+        }
+
+        .status.success {
+            background: #f0fdf4;
+            color: #15803d;
+        }
+
+        .status.error {
+            background: #fef2f2;
+            color: #b91c1c;
+        }
+    </style>
+</head>
+
+<body>
+    <h3>🤖 AutoForms AI</h3>
+
+    <label for="resumeInput">Upload your resume (PDF)</label>
+    <input type="file" id="resumeInput" accept=".pdf" />
+
+    <button id="fillBtn">Auto Fill</button>
+
+    <div id="status" class="status info">Upload your resume and click Auto Fill.</div>
+
+    <script src="popup.js"></script>
+</body>
+
+</html>
