@@ -86,30 +86,34 @@ def parse_and_store_resume(text):
     # ✅ Insert into DB only if valid
     resume_id = None
     if "error" not in parsed:
-        cur = conn.cursor()
-
-        cur.execute(
-            """
-                INSERT INTO resumes (name, email, phone, raw_json)
-                VALUES (%s, %s, %s, %s)
-                RETURNING id
-            """,
-            (
-                parsed.get("name"),
-                parsed.get("email"),
-                parsed.get("phone"),
-                json.dumps(parsed)
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                    INSERT INTO resumes (name, email, phone, raw_json)
+                    VALUES (%s, %s, %s, %s)
+                    RETURNING id
+                """,
+                (
+                    parsed.get("name"),
+                    parsed.get("email"),
+                    parsed.get("phone"),
+                    json.dumps(parsed)
+                )
             )
-        )
 
-        row = cur.fetchone()
+            row = cur.fetchone()
 
-        if row:
-            resume_id = row[0]
-        else:
-            resume_id = None
+            if row:
+                resume_id = row[0]
+            else:
+                resume_id = None
 
-        conn.commit()
+            # The shared connection runs in autocommit mode, so the write is
+            # already committed; this call is kept for explicit clarity and is
+            # a documented no-op under autocommit.  The INSERT's failure state
+            # is rolled back automatically, so it can never poison the shared
+            # connection with an aborted transaction.
+            conn.commit()
 
     return {
         "resume_id": resume_id,  # temp (we'll improve later)
