@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Synthetic Dynamic Form Test Page - AutoForms</title>
+    <style>
+        body { font-family: system-ui, sans-serif; margin: 20px; max-width: 800px; background: #f9fafb; color: #111; }
+        .form-section { background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin-bottom: 20px; }
+        h2 { font-size: 18px; margin-top: 0; color: #1f2937; border-bottom: 1px solid #f3f4f6; padding-bottom: 8px; }
+        .entry-card { background: #f3f4f6; padding: 12px; border-radius: 6px; margin-bottom: 12px; border: 1px solid #e5e7eb; }
+        .form-group { margin-bottom: 10px; }
+        label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 4px; color: #374151; }
+        input[type="text"], textarea, select { width: 100%; padding: 8px; font-size: 14px; border: 1px solid #d1d5db; border-radius: 4px; box-sizing: border-box; }
+        button { background: #2563eb; color: white; border: none; padding: 8px 14px; border-radius: 6px; font-size: 13px; cursor: pointer; }
+        button.add-btn { background: #10b981; }
+        button.danger-btn { background: #ef4444; }
+        button.nav-btn { background: #4b5563; }
+        .actions { margin-top: 10px; display: flex; gap: 8px; }
+    </style>
+</head>
+<body>
+    <h1>Job Application - Dynamic Form Test</h1>
+    
+    <!-- Personal Information -->
+    <div class="form-section">
+        <h2>Personal Information</h2>
+        <div class="form-group">
+            <label for="full_name">Full Name</label>
+            <input type="text" id="full_name" name="full_name" placeholder="John Doe">
+        </div>
+        <div class="form-group">
+            <label for="email">Email Address</label>
+            <input type="text" id="email" name="email" placeholder="john@example.com">
+        </div>
+    </div>
+
+    <!-- Work Experience (Dynamic Repeating Section) -->
+    <div class="form-section" id="section-experience">
+        <h2>Work Experience</h2>
+        <div class="entries-list" id="experience-list">
+            <div class="entry-card" data-entry-index="0">
+                <div class="form-group">
+                    <label>Company Name</label>
+                    <input type="text" class="exp-company" placeholder="e.g. Acme Corp">
+                </div>
+                <div class="form-group">
+                    <label>Job Title / Role</label>
+                    <input type="text" class="exp-role" placeholder="e.g. Software Engineer">
+                </div>
+            </div>
+        </div>
+        <button type="button" class="add-btn" id="add-exp-btn">+ Add Position</button>
+    </div>
+
+    <!-- Education (Dynamic Repeating Section) -->
+    <div class="form-section" id="section-education">
+        <h2>Education</h2>
+        <div class="entries-list" id="education-list">
+            <div class="entry-card" data-entry-index="0">
+                <div class="form-group">
+                    <label>School / University</label>
+                    <input type="text" class="edu-school" placeholder="e.g. MIT">
+                </div>
+                <div class="form-group">
+                    <label>Degree</label>
+                    <input type="text" class="edu-degree" placeholder="e.g. B.S. Computer Science">
+                </div>
+            </div>
+        </div>
+        <button type="button" class="add-btn" id="add-edu-btn">Add Education</button>
+    </div>
+
+    <!-- Projects (Dynamic Repeating Section) -->
+    <div class="form-section" id="section-projects">
+        <h2>Projects</h2>
+        <div class="entries-list" id="project-list">
+            <div class="entry-card" data-entry-index="0">
+                <div class="form-group">
+                    <label>Project Name</label>
+                    <input type="text" class="proj-name" placeholder="Project Name">
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea class="proj-desc" placeholder="Describe the project..."></textarea>
+                </div>
+            </div>
+        </div>
+        <button type="button" class="add-btn" id="add-proj-btn">Add Project</button>
+    </div>
+
+    <!-- Certifications (Generic '+' Button) -->
+    <div class="form-section" id="section-certifications">
+        <h2>Certifications</h2>
+        <div class="entries-list" id="cert-list">
+            <div class="entry-card" data-entry-index="0">
+                <div class="form-group">
+                    <label>Certification Name</label>
+                    <input type="text" class="cert-name" placeholder="e.g. AWS Certified Developer">
+                </div>
+            </div>
+        </div>
+        <button type="button" class="add-btn" id="add-cert-btn">+</button>
+    </div>
+
+    <!-- Action Buttons (Forbidden controls - should NEVER be auto-clicked) -->
+    <div class="form-section">
+        <div class="actions">
+            <button type="button" class="nav-btn" id="save-btn">Save Draft</button>
+            <button type="button" class="danger-btn" id="delete-btn">Delete Application</button>
+            <button type="submit" id="submit-btn">Submit Application</button>
+        </div>
+    </div>
+
+    <script>
+        // Interactive dynamic section handlers for testing
+        let expCount = 1;
+        document.getElementById('add-exp-btn').addEventListener('click', () => {
+            const list = document.getElementById('experience-list');
+            const card = document.createElement('div');
+            card.className = 'entry-card';
+            card.setAttribute('data-entry-index', expCount++);
+            card.innerHTML = `
+                <div class="form-group">
+                    <label>Company Name</label>
+                    <input type="text" class="exp-company" placeholder="e.g. Acme Corp">
+                </div>
+                <div class="form-group">
+                    <label>Job Title / Role</label>
+                    <input type="text" class="exp-role" placeholder="e.g. Software Engineer">
+                </div>
+            `;
+            list.appendChild(card);
+        });
+
+        let eduCount = 1;
+        document.getElementById('add-edu-btn').addEventListener('click', () => {
+            const list = document.getElementById('education-list');
+            const card = document.createElement('div');
+            card.className = 'entry-card';
+            card.setAttribute('data-entry-index', eduCount++);
+            card.innerHTML = `
+                <div class="form-group">
+                    <label>School / University</label>
+                    <input type="text" class="edu-school" placeholder="e.g. MIT">
+                </div>
+                <div class="form-group">
+                    <label>Degree</label>
+                    <input type="text" class="edu-degree" placeholder="e.g. B.S. Computer Science">
+                </div>
+            `;
+            list.appendChild(card);
+        });
+
+        let projCount = 1;
+        document.getElementById('add-proj-btn').addEventListener('click', () => {
+            const list = document.getElementById('project-list');
+            const card = document.createElement('div');
+            card.className = 'entry-card';
+            card.setAttribute('data-entry-index', projCount++);
+            card.innerHTML = `
+                <div class="form-group">
+                    <label>Project Name</label>
+                    <input type="text" class="proj-name" placeholder="Project Name">
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea class="proj-desc" placeholder="Describe the project..."></textarea>
+                </div>
+            `;
+            list.appendChild(card);
+        });
+
+        let certCount = 1;
+        document.getElementById('add-cert-btn').addEventListener('click', () => {
+            const list = document.getElementById('cert-list');
+            const card = document.createElement('div');
+            card.className = 'entry-card';
+            card.setAttribute('data-entry-index', certCount++);
+            card.innerHTML = `
+                <div class="form-group">
+                    <label>Certification Name</label>
+                    <input type="text" class="cert-name" placeholder="e.g. AWS Certified Developer">
+                </div>
+            `;
+            list.appendChild(card);
+        });
+    </script>
+</body>
+</html>

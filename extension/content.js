@@ -900,6 +900,348 @@ if (window.__autoformsAI) {
         });
     }
 
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // ─── DYNAMIC FORM ENGINE (Generic Dynamic/Repeating Form Section Handler) ───────
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    const SECTION_TAXONOMY = {
+        experience: {
+            keywords: ["experience", "work history", "employment", "job history", "positions", "work experience", "career"],
+            resumeKeys: ["experience"],
+            fallbackFields: ["current_company", "current_role"]
+        },
+        education: {
+            keywords: ["education", "academic", "qualification", "degree", "schooling", "college", "university"],
+            resumeKeys: ["education"],
+            fallbackFields: ["college", "degree", "branch", "graduation_year", "gpa"]
+        },
+        projects: {
+            keywords: ["project", "projects", "portfolio", "side projects"],
+            resumeKeys: ["projects"],
+            fallbackFields: []
+        },
+        certifications: {
+            keywords: ["certification", "certifications", "certificate", "license", "licenses", "credentials"],
+            resumeKeys: ["certifications", "licenses"],
+            fallbackFields: []
+        },
+        skills: {
+            keywords: ["skill", "skills", "technologies", "competencies"],
+            resumeKeys: ["skills"],
+            fallbackFields: []
+        },
+        languages: {
+            keywords: ["language", "languages"],
+            resumeKeys: ["languages"],
+            fallbackFields: []
+        }
+    };
+
+    function getResumeEntriesForSection(sectionType, data) {
+        if (!data || !sectionType) return [];
+        const tax = SECTION_TAXONOMY[sectionType];
+        if (tax && tax.resumeKeys) {
+            for (const key of tax.resumeKeys) {
+                if (Array.isArray(data[key]) && data[key].length > 0) {
+                    return data[key];
+                }
+            }
+        }
+
+        if (sectionType === "experience" && (data.current_company || data.current_role)) {
+            return [{
+                company: data.current_company || "",
+                role: data.current_role || "",
+                start_date: "",
+                end_date: "Present",
+                description: data.summary || data.experience || ""
+            }];
+        }
+        if (sectionType === "education" && (data.college || data.degree)) {
+            return [{
+                institution: data.college || "",
+                degree: data.degree || "",
+                branch: data.branch || "",
+                start_date: "",
+                end_date: data.graduation_year || "",
+                gpa: data.gpa || ""
+            }];
+        }
+
+        return [];
+    }
+
+    function detectSectionContext(el) {
+        if (!el || !(el instanceof HTMLElement)) return null;
+
+        let container = el.closest("section, fieldset, form, [role='region'], [role='form'], .form-section, .card, .panel") || el.parentElement;
+
+        for (let depth = 0; depth < 8 && container && container !== document.body; depth++) {
+            const headings = container.querySelectorAll("h1, h2, h3, h4, h5, h6, legend, header, [role='heading'], [data-params]");
+            for (const h of headings) {
+                const text = (h.innerText || h.getAttribute("aria-label") || "").trim().toLowerCase();
+                for (const [sType, tax] of Object.entries(SECTION_TAXONOMY)) {
+                    if (matches(text, ...tax.keywords)) {
+                        return { container, sectionType: sType, title: text };
+                    }
+                }
+            }
+
+            const containerInfo = ((container.id || "") + " " + (container.className || "") + " " + (container.getAttribute("aria-label") || "")).toLowerCase();
+            for (const [sType, tax] of Object.entries(SECTION_TAXONOMY)) {
+                if (matches(containerInfo, ...tax.keywords)) {
+                    return { container, sectionType: sType, title: containerInfo };
+                }
+            }
+
+            container = container.parentElement;
+        }
+
+        return null;
+    }
+
+    function countExistingSectionEntries(container, sectionType) {
+        if (!container) return 0;
+
+        const entryCards = container.querySelectorAll(".entry-card, .repeater-item, [data-entry-index], .entry, .item-row");
+        if (entryCards.length > 0) {
+            return entryCards.length;
+        }
+
+        if (sectionType === "experience") {
+            const companyInputs = container.querySelectorAll("input:not([type=hidden])");
+            let matched = 0;
+            companyInputs.forEach(i => {
+                const key = getFieldKey(i);
+                if (matches(key, "company", "employer", "organization")) matched++;
+            });
+            return Math.max(matched, 1);
+        }
+
+        if (sectionType === "education") {
+            const schoolInputs = container.querySelectorAll("input:not([type=hidden])");
+            let matched = 0;
+            schoolInputs.forEach(i => {
+                const key = getFieldKey(i);
+                if (matches(key, "school", "college", "university", "institution", "degree")) matched++;
+            });
+            return Math.max(matched, 1);
+        }
+
+        if (sectionType === "projects") {
+            const projInputs = container.querySelectorAll("input:not([type=hidden]), textarea");
+            let matched = 0;
+            projInputs.forEach(i => {
+                const key = getFieldKey(i);
+                if (matches(key, "project name", "project title", "project description")) matched++;
+            });
+            return Math.max(matched, 1);
+        }
+
+        const fillables = container.querySelectorAll("input:not([type=hidden]), textarea, select");
+        return fillables.length > 0 ? 1 : 0;
+    }
+
+    function classifyControl(el) {
+        if (!el || !(el instanceof HTMLElement)) return { type: "UNKNOWN", confidence: 0 };
+
+        const text = (el.innerText || el.value || el.getAttribute("aria-label") || el.title || "").trim();
+        const normalizedText = text.toLowerCase();
+        const idClassText = ((el.id || "") + " " + (el.className || "") + " " + (el.getAttribute("aria-label") || "")).toLowerCase();
+        const fullText = (normalizedText + " " + idClassText).trim();
+
+        // ── DANGEROUS / FORBIDDEN BUTTONS CHECK ──
+        const FORBIDDEN_KEYWORDS = [
+            "submit", "save", "apply", "delete", "remove", "trash", "cancel", "clear",
+            "next", "previous", "back", "continue", "sign in", "login", "register",
+            "search", "upload", "attach", "download", "close", "ok"
+        ];
+
+        if (matches(fullText, ...FORBIDDEN_KEYWORDS)) {
+            if (matches(fullText, "submit", "apply", "save")) return { type: "SUBMIT", confidence: 1.0, reason: "Forbidden submit/save action" };
+            if (matches(fullText, "delete", "remove", "trash", "clear")) return { type: "REMOVE_ENTRY", confidence: 1.0, reason: "Forbidden destructive button" };
+            if (matches(fullText, "next", "continue")) return { type: "NEXT", confidence: 1.0, reason: "Navigation button" };
+            if (matches(fullText, "previous", "back")) return { type: "PREVIOUS", confidence: 1.0, reason: "Navigation button" };
+            return { type: "FORBIDDEN", confidence: 1.0, reason: "Matched forbidden control keyword" };
+        }
+
+        // ── ADD_ENTRY SIGNALS ──
+        const ADD_TEXT_KEYWORDS = [
+            "add", "add another", "add position", "add experience", "add education",
+            "add project", "add certification", "add skill", "add language", "add row",
+            "add item", "add new", "add more", "create new", "+ add", "add section"
+        ];
+
+        const isPlusIcon = text === "+" || text === "＋" || (el.querySelector("svg") !== null && (fullText.includes("add") || fullText.includes("plus") || text.length <= 2));
+        const textMatch = matches(normalizedText, ...ADD_TEXT_KEYWORDS) || isPlusIcon;
+        const attrMatch = matches(idClassText, "add-btn", "add_btn", "btn-add", "add-entry", "repeater-add", "add-row");
+
+        if (!textMatch && !attrMatch) {
+            return { type: "UNKNOWN", confidence: 0, reason: "No add entry signals" };
+        }
+
+        const sectionInfo = detectSectionContext(el);
+        let confidence = 0.5;
+
+        if (textMatch && sectionInfo) confidence += 0.4;
+        else if (textMatch) confidence += 0.25;
+
+        if (attrMatch) confidence += 0.15;
+        if (isPlusIcon && sectionInfo) confidence += 0.35;
+
+        if (confidence >= 0.70) {
+            return {
+                type: "ADD_ENTRY",
+                confidence: Math.min(confidence, 1.0),
+                section: sectionInfo ? sectionInfo.sectionType : "generic",
+                container: sectionInfo ? sectionInfo.container : el.parentElement,
+                reason: `Matched add signals (text="${text}") in section "${sectionInfo ? sectionInfo.sectionType : "generic"}"`
+            };
+        }
+
+        return { type: "UNKNOWN", confidence, reason: "Low confidence for ADD_ENTRY" };
+    }
+
+    function fillSpecificSectionEntry(entryCard, sectionType, entryData) {
+        if (!entryCard || !entryData) return 0;
+        let filled = 0;
+
+        const inputs = entryCard.querySelectorAll("input:not([type=hidden]), textarea, select");
+        inputs.forEach(input => {
+            if (!isFillableField(input) || input.value) return;
+            const key = getFieldKey(input);
+            let val = null;
+
+            if (sectionType === "experience") {
+                if (matches(key, "company", "employer", "organization", "organisation")) val = entryData.company;
+                else if (matches(key, "role", "title", "designation", "position", "job title")) val = entryData.role;
+                else if (matches(key, "start date", "from", "joining")) val = entryData.start_date;
+                else if (matches(key, "end date", "to", "leaving", "relieving")) val = entryData.end_date;
+                else if (matches(key, "description", "summary", "responsibilities")) val = entryData.description;
+            } else if (sectionType === "education") {
+                if (matches(key, "school", "college", "university", "institution")) val = entryData.institution;
+                else if (matches(key, "degree", "qualification")) val = entryData.degree;
+                else if (matches(key, "branch", "major", "stream", "specialization")) val = entryData.branch;
+                else if (matches(key, "start date", "joining")) val = entryData.start_date;
+                else if (matches(key, "end date", "passing year", "graduation year")) val = entryData.end_date || entryData.graduation_year;
+                else if (matches(key, "gpa", "cgpa", "percentage", "marks")) val = entryData.gpa || entryData.percentage;
+            } else if (sectionType === "projects") {
+                if (matches(key, "name", "title", "project name")) val = entryData.name;
+                else if (matches(key, "description", "details")) val = entryData.description;
+                else if (matches(key, "url", "link")) val = entryData.url || entryData.github;
+                else if (matches(key, "technology", "skills", "tech stack")) val = Array.isArray(entryData.technologies) ? entryData.technologies.join(", ") : entryData.technologies;
+            } else if (sectionType === "certifications") {
+                if (matches(key, "name", "title", "certification")) val = entryData.name || entryData.title;
+                else if (matches(key, "authority", "issuer", "org")) val = entryData.authority || entryData.issuer;
+                else if (matches(key, "date", "issued")) val = entryData.date;
+            } else if (sectionType === "skills") {
+                if (matches(key, "skill", "name")) val = typeof entryData === "string" ? entryData : entryData.name;
+            } else if (sectionType === "languages") {
+                if (matches(key, "language", "name")) val = typeof entryData === "string" ? entryData : entryData.name;
+            }
+
+            if (val && fill(input, val)) {
+                console.log(`[DYNAMIC] Filled [${sectionType} #${entryCard.getAttribute("data-entry-index") || "new"}] field "${key}" → "${String(val).slice(0, 30)}"`);
+                filled++;
+            }
+        });
+
+        return filled;
+    }
+
+    async function runDynamicFormEngine(data) {
+        if (!data) return 0;
+        console.log("🤖 [DYNAMIC] Running Dynamic Form Engine...");
+        let totalFilled = 0;
+
+        const controls = queryAll("button, a, [role='button'], input[type='button']");
+        const candidateAddControls = [];
+
+        for (const ctrl of controls) {
+            if (!isFillableField(ctrl) && ctrl.type !== "button" && ctrl.tagName !== "BUTTON" && ctrl.tagName !== "A" && ctrl.getAttribute("role") !== "button") continue;
+            const classif = classifyControl(ctrl);
+            if (classif.type === "ADD_ENTRY" && classif.confidence >= 0.70) {
+                candidateAddControls.push({ element: ctrl, ...classif });
+            }
+        }
+
+        if (candidateAddControls.length === 0) {
+            console.log("🤖 [DYNAMIC] No dynamic ADD_ENTRY controls detected.");
+            return 0;
+        }
+
+        for (const item of candidateAddControls) {
+            const ctrl = item.element;
+            const sectionType = item.section;
+            const container = item.container || ctrl.parentElement;
+            
+            if (sectionType === "generic" || !sectionType) continue;
+
+            const resumeEntries = getResumeEntriesForSection(sectionType, data);
+            const requiredCount = resumeEntries.length;
+
+            if (requiredCount <= 1) {
+                const existingCards = container.querySelectorAll(".entry-card, .repeater-item, [data-entry-index], fieldset");
+                if (existingCards.length > 0 && resumeEntries.length > 0) {
+                    totalFilled += fillSpecificSectionEntry(existingCards[0], sectionType, resumeEntries[0]);
+                }
+                continue;
+            }
+
+            let existingCount = countExistingSectionEntries(container, sectionType);
+            console.log(`[DYNAMIC] Section "${sectionType}": Required entries = ${requiredCount}, Existing entries = ${existingCount}`);
+
+            let entryCards = container.querySelectorAll(".entry-card, .repeater-item, [data-entry-index], fieldset");
+            for (let i = 0; i < Math.min(existingCount, requiredCount); i++) {
+                const card = entryCards[i] || container;
+                if (resumeEntries[i]) {
+                    totalFilled += fillSpecificSectionEntry(card, sectionType, resumeEntries[i]);
+                }
+            }
+
+            let clickAttempts = 0;
+            const maxClicks = Math.min(requiredCount - existingCount, 5);
+
+            while (existingCount < requiredCount && clickAttempts < maxClicks) {
+                const clickCount = parseInt(ctrl.dataset.afAddCount || "0");
+                if (clickCount >= 5) {
+                    console.warn(`[DYNAMIC] Reached max click attempts for control in section "${sectionType}"`);
+                    break;
+                }
+
+                console.log(`[DYNAMIC] Creating entry #${existingCount + 1} for section "${sectionType}" (Click attempt ${clickAttempts + 1})`);
+                
+                const prevFieldCount = container.querySelectorAll("input:not([type=hidden]), textarea").length;
+                ctrl.dataset.afAddCount = String(clickCount + 1);
+                ctrl.click();
+                clickAttempts++;
+
+                // DOM stabilization delay (300ms)
+                await new Promise(r => setTimeout(r, 300));
+
+                const newFieldCount = container.querySelectorAll("input:not([type=hidden]), textarea").length;
+                entryCards = container.querySelectorAll(".entry-card, .repeater-item, [data-entry-index], fieldset");
+                const newExistingCount = Math.max(entryCards.length, countExistingSectionEntries(container, sectionType));
+
+                if (newFieldCount > prevFieldCount || newExistingCount > existingCount) {
+                    console.log(`[DYNAMIC] DOM updated successfully for section "${sectionType}". New entry detected.`);
+                    const targetIndex = existingCount;
+                    if (resumeEntries[targetIndex]) {
+                        const newCard = entryCards[targetIndex] || entryCards[entryCards.length - 1] || container;
+                        totalFilled += fillSpecificSectionEntry(newCard, sectionType, resumeEntries[targetIndex]);
+                    }
+                    existingCount = newExistingCount > existingCount ? newExistingCount : existingCount + 1;
+                } else {
+                    console.warn(`[DYNAMIC] Click on control did not create new fields in section "${sectionType}". Stopping expansion.`);
+                    break;
+                }
+            }
+        }
+
+        console.log(`🤖 [DYNAMIC] Dynamic Form Engine completed. ${totalFilled} dynamic section fields filled.`);
+        return totalFilled;
+    }
+
     // ─── Main Listener ────────────────────────────────────────────────────────────
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (message.action !== "FILL_FORM") return;
@@ -908,8 +1250,14 @@ if (window.__autoformsAI) {
 
         (async () => {
             console.log("🤖 AutoForms AI: starting form fill automation...");
+
+            // 1. Run Dynamic Form Engine first to handle dynamic repeating sections
+            const dynamicFilled = await runDynamicFormEngine(data);
+
+            // 2. Run Standard Fill loop for static/dynamic fields
             const { totalFilled, unresolvedList } = await waitForInputsAndFill(data);
 
+            // 3. Run AI Radio / Checkbox handlers
             console.log("🤖 AutoForms AI: running AI radio/checkbox selection...");
             const [r1, r2, c1, c2] = await Promise.all([
                 handleRadioGroupsWithAI(data),
@@ -920,9 +1268,10 @@ if (window.__autoformsAI) {
             const aiRadioCount = r1 + r2 + c1 + c2;
             console.log(`🤖 AI selection: ${aiRadioCount} radio/checkbox fields filled`);
 
+            // 4. Run AI Fill Plan fallback
             const aiPlanFilled = await runFillPlanAI(unresolvedList, data);
 
-            const totalFormFilled = totalFilled + aiRadioCount + aiPlanFilled;
+            const totalFormFilled = dynamicFilled + totalFilled + aiRadioCount + aiPlanFilled;
 
             const essayFields = detectEssayFields();
             const essayCount = essayFields.length;
@@ -955,3 +1304,4 @@ if (window.__autoformsAI) {
     });
 
 } // end injection guard
+
