@@ -17,8 +17,6 @@ are still isolated, so this does not change API behaviour.
 """
 import psycopg2
 
-from config import DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
-
 from config import DATABASE_URL
 
 conn = psycopg2.connect(
