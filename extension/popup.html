@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AutoForms AI</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            width: 320px;
+            padding: 16px;
+            background: #ffffff;
+            color: #1a1a1a;
+        }
+
+        h3 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: #111;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .card {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 12px;
+        }
+
+        label {
+            display: block;
+            font-size: 12px;
+            font-weight: 500;
+            color: #475569;
+            margin-bottom: 4px;
+        }
+
+        input[type="file"], input[type="text"], select {
+            display: block;
+            width: 100%;
+            font-size: 12px;
+            padding: 6px 8px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            background: white;
+        }
+
+        .profile-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+        }
+
+        button {
+            width: 100%;
+            padding: 9px;
+            background: #4f46e5;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-bottom: 6px;
+        }
+
+        button.secondary {
+            background: #0ea5e9;
+        }
+
+        button:hover:not(:disabled) {
+            opacity: 0.9;
+        }
+
+        button:disabled {
+            background: #a5b4fc;
+            cursor: not-allowed;
+        }
+
+        .status {
+            margin-top: 8px;
+            font-size: 12px;
+            padding: 8px 10px;
+            border-radius: 6px;
+            min-height: 32px;
+            line-height: 1.4;
+        }
+
+        .status.info {
+            background: #eff6ff;
+            color: #1d4ed8;
+        }
+
+        .status.success {
+            background: #f0fdf4;
+            color: #15803d;
+        }
+
+        .status.error {
+            background: #fef2f2;
+            color: #b91c1c;
+        }
+
+        details {
+            margin-bottom: 10px;
+            font-size: 12px;
+            color: #475569;
+        }
+
+        summary {
+            cursor: pointer;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+    </style>
+</head>
+
+<body>
+    <h3>🤖 AutoForms AI</h3>
+
+    <div class="card">
+        <label for="resumeInput">Upload Resume (PDF)</label>
+        <input type="file" id="resumeInput" accept=".pdf" />
+        <button id="uploadBtn">Parse Resume</button>
+    </div>
+
+    <details id="profileSection" open>
+        <summary>Profile Settings & Preferences</summary>
+        <div class="card profile-grid">
+            <div>
+                <label>Notice Period</label>
+                <input type="text" id="prefNotice" placeholder="e.g. Immediate" />
+            </div>
+            <div>
+                <label>Expected CTC</label>
+                <input type="text" id="prefExpectedCtc" placeholder="e.g. 12 LPA" />
+            </div>
+            <div>
+                <label>Gender</label>
+                <input type="text" id="prefGender" placeholder="e.g. Male / Female" />
+            </div>
+            <div>
+                <label>Nationality</label>
+                <input type="text" id="prefNationality" placeholder="e.g. Indian" />
+            </div>
+            <div>
+                <label>Languages</label>
+                <input type="text" id="prefLanguages" placeholder="e.g. English, Hindi" />
+            </div>
+            <div>
+                <label>Date of Birth</label>
+                <input type="text" id="prefDob" placeholder="YYYY-MM-DD" />
+            </div>
+        </div>
+        <button id="saveProfileBtn" class="secondary">Save Profile Changes</button>
+    </details>
+
+    <button id="fillBtn">Auto Fill Current Form</button>
+
+    <div id="status" class="status info">Upload resume or use cached profile to auto fill.</div>
+
+    <script src="popup.js"></script>
+</body>
+
+</html>
