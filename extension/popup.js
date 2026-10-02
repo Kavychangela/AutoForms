@@ -71,20 +71,33 @@ async function parseResumeFile(file) {
     const formData = new FormData();
     formData.append("file", file);
 
-    const response = await fetch(`${API_BASE_URL}/parse-resume`, {
-        method: "POST",
-        body: formData
-    });
+    const endpoints = [
+        "https://autoforms-1-x96i.onrender.com/parse-resume",
+        "http://localhost:8000/parse-resume",
+        "http://127.0.0.1:8000/parse-resume"
+    ];
 
-    if (!response.ok) {
-        throw new Error(`Server error: ${response.status}`);
+    let lastError = null;
+    for (const url of endpoints) {
+        try {
+            console.log(`[AutoForms Popup] Attempting parse-resume at ${url}...`);
+            const response = await fetch(url, {
+                method: "POST",
+                body: formData
+            });
+            if (response.ok) {
+                const result = await response.json();
+                if (result.error) throw new Error(result.error);
+                console.log(`[AutoForms Popup] Parse successful via ${url}`, result);
+                return result;
+            }
+        } catch (err) {
+            console.warn(`[AutoForms Popup] Endpoint ${url} failed:`, err);
+            lastError = err;
+        }
     }
 
-    const result = await response.json();
-    if (result.error) {
-        throw new Error(result.error);
-    }
-    return result;
+    throw lastError || new Error("Failed to reach AutoForms backend server.");
 }
 
 async function sendFillMessage(profile, resumeId) {
