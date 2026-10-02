@@ -1,15 +1,9 @@
-"""AI answer generation for essay-style form fields.
-
-This is the exact logic that previously lived inside the ``/generate-answer``
-endpoint in ``main.py``.  Nothing has been changed beyond moving it into a
-function.
-"""
+"""AI answer generation for essay-style form fields."""
 from config import ANSWER_GENERATION_MODEL
 from services.ai_client import client
 
 
 def generate_answer(req):
-    # Build a compact resume summary for the prompt
     ctx = req.context
     skills = ", ".join(ctx.get("skills", [])) if isinstance(ctx.get("skills"), list) else ctx.get("skills", "")
     resume_summary = f"""
@@ -25,31 +19,33 @@ Current Company: {ctx.get("current_company", "")}
 Summary: {ctx.get("summary", "")}
         """.strip()
 
-    prompt = f"""
-You are helping a candidate fill out a {req.form_purpose} form.
+    limits_desc = ""
+    if hasattr(req, "maxlength") and req.maxlength:
+        limits_desc += f"\n- Maximum character limit: {req.maxlength} characters."
+    if hasattr(req, "word_limit") and req.word_limit:
+        limits_desc += f"\n- Maximum word limit: {req.word_limit} words."
 
-Here is the candidate's resume information:
+    prompt = f"""You are helping a candidate fill out a {req.form_purpose} form.
+
+Candidate resume information:
 {resume_summary}
 
-The form has this question/field:
+Question / Field label:
 "{req.question}"
 
-Write a professional, personalized answer for this question based on the candidate's background.
-
 Rules:
-- Keep it concise: 3-5 sentences max unless the question clearly requires more
-- Sound natural and human, not like a template
-- Be specific — use actual details from the resume (skills, college, projects, experience)
-- Do NOT start with "I am writing to..." or "Dear Sir/Madam"
-- Do NOT add any preamble, explanation, or extra text — just the answer itself
-- If the question is about motivation or goals, connect it to their actual background
-        """
+- Write a professional, personalized answer based strictly on the candidate's background.
+- Do NOT invent or embellish any employment history, projects, achievements, technologies, dates, companies, or education not supported by the resume.
+- Keep it concise (3-5 sentences max unless specified otherwise).{limits_desc}
+- Sound natural and human.
+- Do NOT add any preamble, greeting ("Dear Sir/Madam"), or extra text — output only the answer itself.
+"""
 
     response = client.chat.completions.create(
         model=ANSWER_GENERATION_MODEL,
         messages=[{"role": "user", "content": prompt}],
-        temperature=0.7   # slight creativity for natural writing
+        temperature=0.3
     )
 
     answer = response.choices[0].message.content.strip()
-    return {"answer": answer}
+    return {"answer": answer}

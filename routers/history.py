@@ -9,6 +9,9 @@ router = APIRouter()
 
 @router.post("/save-history")
 def save_history(req: HistoryRequest):
+    if req.resume_id is None:
+        return {"error": "Missing resume_id. Cannot attribute history without valid resume record."}
+
     with conn.cursor() as cur:
         try:
             cur.execute(
@@ -23,19 +26,11 @@ def save_history(req: HistoryRequest):
                     req.ai_answers
                 )
             )
-
-            # The shared connection runs in autocommit mode, so the write is
-            # already committed; this call is kept for explicit clarity and is
-            # a documented no-op under autocommit.
             conn.commit()
-
             print("HIT SAVE HISTORY:", req)
-
             return {"status": "saved"}
 
         except Exception as e:
-            # Defensive: clears any failed statement state on the shared
-            # connection so subsequent requests are never poisoned.
             conn.rollback()
             print("SAVE HISTORY ERROR:", e)
-            return {"error": str(e)}
+            return {"error": str(e)}
