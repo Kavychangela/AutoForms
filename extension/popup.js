@@ -10,6 +10,8 @@ const prefNationality = document.getElementById("prefNationality");
 const prefLanguages = document.getElementById("prefLanguages");
 const prefDob = document.getElementById("prefDob");
 
+const API_BASE_URL = "https://autoforms-1-x96i.onrender.com";
+
 function setStatus(msg, type = "info") {
     statusEl.textContent = msg;
     statusEl.className = "status " + type;
@@ -17,8 +19,8 @@ function setStatus(msg, type = "info") {
 
 function setLoading(isLoading, text = "Auto Fill") {
     fillBtn.disabled = isLoading;
-    uploadBtn.disabled = isLoading;
-    fillBtn.textContent = isLoading ? text : "Auto Fill Current Form";
+    if (uploadBtn) uploadBtn.disabled = isLoading;
+    fillBtn.textContent = isLoading ? text : "Auto Fill";
 }
 
 // Load cached profile on popup open
@@ -26,137 +28,176 @@ document.addEventListener("DOMContentLoaded", () => {
     chrome.storage.local.get(["parsedProfile"], (result) => {
         if (result.parsedProfile) {
             populateProfileFields(result.parsedProfile);
-            setStatus("Cached profile loaded. Ready to auto fill!", "success");
+            setStatus("Cached profile ready. Click Auto Fill.", "success");
         }
     });
 });
 
 function populateProfileFields(profile) {
     if (!profile) return;
-    prefNotice.value = profile.notice_period || "";
-    prefExpectedCtc.value = profile.expected_ctc || "";
-    prefGender.value = profile.gender || "";
-    prefNationality.value = profile.nationality || "";
-    prefLanguages.value = profile.languages || "";
-    prefDob.value = profile.dob || "";
+    if (prefNotice) prefNotice.value = profile.notice_period || "";
+    if (prefExpectedCtc) prefExpectedCtc.value = profile.expected_ctc || "";
+    if (prefGender) prefGender.value = profile.gender || "";
+    if (prefNationality) prefNationality.value = profile.nationality || "";
+    if (prefLanguages) prefLanguages.value = profile.languages || "";
+    if (prefDob) prefDob.value = profile.dob || "";
 }
 
 function getUpdatedProfile(baseProfile = {}) {
     return {
         ...baseProfile,
-        notice_period: prefNotice.value.trim() || baseProfile.notice_period || "",
-        expected_ctc: prefExpectedCtc.value.trim() || baseProfile.expected_ctc || "",
-        gender: prefGender.value.trim() || baseProfile.gender || "",
-        nationality: prefNationality.value.trim() || baseProfile.nationality || "",
-        languages: prefLanguages.value.trim() || baseProfile.languages || "",
-        dob: prefDob.value.trim() || baseProfile.dob || ""
+        notice_period: prefNotice ? prefNotice.value.trim() || baseProfile.notice_period || "" : baseProfile.notice_period || "",
+        expected_ctc: prefExpectedCtc ? prefExpectedCtc.value.trim() || baseProfile.expected_ctc || "" : baseProfile.expected_ctc || "",
+        gender: prefGender ? prefGender.value.trim() || baseProfile.gender || "" : baseProfile.gender || "",
+        nationality: prefNationality ? prefNationality.value.trim() || baseProfile.nationality || "" : baseProfile.nationality || "",
+        languages: prefLanguages ? prefLanguages.value.trim() || baseProfile.languages || "" : baseProfile.languages || "",
+        dob: prefDob ? prefDob.value.trim() || baseProfile.dob || "" : baseProfile.dob || ""
     };
 }
 
-saveProfileBtn.addEventListener("click", () => {
-    chrome.storage.local.get(["parsedProfile"], (result) => {
-        const current = result.parsedProfile || {};
-        const updated = getUpdatedProfile(current);
-        chrome.storage.local.set({ parsedProfile: updated }, () => {
-            setStatus("Profile preferences saved!", "success");
+if (saveProfileBtn) {
+    saveProfileBtn.addEventListener("click", () => {
+        chrome.storage.local.get(["parsedProfile"], (result) => {
+            const current = result.parsedProfile || {};
+            const updated = getUpdatedProfile(current);
+            chrome.storage.local.set({ parsedProfile: updated }, () => {
+                setStatus("Profile preferences saved!", "success");
+            });
         });
     });
-});
+}
 
-uploadBtn.addEventListener("click", async () => {
-    const fileInput = document.getElementById("resumeInput");
-    const file = fileInput.files[0];
+async function parseResumeFile(file) {
+    const formData = new FormData();
+    formData.append("file", file);
 
-    if (!file) {
-        setStatus("Please select a PDF resume file first.", "error");
-        return;
+    const response = await fetch(`${API_BASE_URL}/parse-resume`, {
+        method: "POST",
+        body: formData
+    });
+
+    if (!response.ok) {
+        throw new Error(`Server error: ${response.status}`);
     }
 
-    setLoading(true, "Parsing resume...");
-    setStatus("Uploading and parsing resume...", "info");
-
-    try {
-        const formData = new FormData();
-        formData.append("file", file);
-
-        const response = await fetch("https://autoforms-1-x96i.onrender.com/parse-resume", {
-            method: "POST",
-            body: formData
-        });
-
-        if (!response.ok) {
-            throw new Error(`Server error: ${response.status}`);
-        }
-
-        const result = await response.json();
-        if (result.error) {
-            throw new Error(result.error);
-        }
-
-        const updatedProfile = getUpdatedProfile(result);
-        chrome.storage.local.set({
-            parsedProfile: updatedProfile,
-            resumeId: result.resume_id
-        });
-
-        populateProfileFields(updatedProfile);
-        setStatus("Resume parsed successfully! You can now Auto Fill.", "success");
-
-    } catch (err) {
-        setStatus("Error parsing resume: " + err.message, "error");
-    } finally {
-        setLoading(false);
+    const result = await response.json();
+    if (result.error) {
+        throw new Error(result.error);
     }
-});
+    return result;
+}
 
-fillBtn.addEventListener("click", async () => {
-    chrome.storage.local.get(["parsedProfile", "resumeId"], async (res) => {
-        const profile = getUpdatedProfile(res.parsedProfile || {});
+async function sendFillMessage(profile, resumeId) {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab) {
+        throw new Error("No active browser tab found.");
+    }
 
-        if (!profile || Object.keys(profile).length === 0) {
-            setStatus("No profile found. Please upload a resume first.", "error");
+    return new Promise((resolve) => {
+        chrome.tabs.sendMessage(tab.id, {
+            action: "FILL_FORM",
+            data: profile,
+            resumeId: resumeId
+        }, (fillResponse) => {
+            if (chrome.runtime.lastError || !fillResponse) {
+                resolve(null);
+            } else {
+                resolve(fillResponse);
+            }
+        });
+    });
+}
+
+// "Parse Resume" separate button handler
+if (uploadBtn) {
+    uploadBtn.addEventListener("click", async () => {
+        const fileInput = document.getElementById("resumeInput");
+        const file = fileInput.files[0];
+
+        if (!file) {
+            setStatus("Please select a PDF resume file first.", "error");
             return;
         }
 
-        const resumeId = res.resumeId || profile.resume_id;
-        if (!resumeId) {
-            setStatus("Warning: No resumeId found in profile.", "error");
-        }
-
-        setLoading(true, "Filling form...");
-        setStatus("Filling form fields...", "info");
+        setLoading(true, "Parsing resume...");
+        setStatus("Uploading and parsing resume...", "info");
 
         try {
-            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-            if (!tab) {
-                setStatus("No active tab found.", "error");
-                return;
-            }
-
-            chrome.tabs.sendMessage(tab.id, {
-                action: "FILL_FORM",
-                data: profile,
-                resumeId: resumeId
-            }, (fillResponse) => {
-                setLoading(false);
-                if (chrome.runtime.lastError || !fillResponse) {
-                    setStatus("Could not reach the page. Try refreshing.", "error");
-                    return;
-                }
-
-                const { filled, essayCount } = fillResponse;
-                if (essayCount > 0) {
-                    setStatus(`${filled} fields filled. Generating ${essayCount} AI answer${essayCount > 1 ? "s" : ""}...`, "info");
-                } else {
-                    setStatus(`Done! ${filled} fields filled.`, "success");
-                }
+            const result = await parseResumeFile(file);
+            const updatedProfile = getUpdatedProfile(result);
+            chrome.storage.local.set({
+                parsedProfile: updatedProfile,
+                resumeId: result.resume_id
             });
-
+            populateProfileFields(updatedProfile);
+            setStatus("Resume parsed successfully!", "success");
         } catch (err) {
             setStatus("Error: " + err.message, "error");
+        } finally {
             setLoading(false);
         }
     });
+}
+
+// "Auto Fill" main button handler (Seamless auto-parse + auto-fill flow)
+fillBtn.addEventListener("click", async () => {
+    const fileInput = document.getElementById("resumeInput");
+    const file = fileInput ? fileInput.files[0] : null;
+
+    setLoading(true, "Processing...");
+
+    try {
+        let profile = null;
+        let resumeId = null;
+
+        // Step 1: If a new file is uploaded, parse it first
+        if (file) {
+            setStatus("Uploading and parsing resume...", "info");
+            const result = await parseResumeFile(file);
+            profile = getUpdatedProfile(result);
+            resumeId = result.resume_id;
+
+            chrome.storage.local.set({
+                parsedProfile: profile,
+                resumeId: resumeId
+            });
+            populateProfileFields(profile);
+        } else {
+            // Step 2: Fallback to stored profile
+            const res = await new Promise(r => chrome.storage.local.get(["parsedProfile", "resumeId"], r));
+            if (res.parsedProfile && Object.keys(res.parsedProfile).length > 0) {
+                profile = getUpdatedProfile(res.parsedProfile);
+                resumeId = res.resumeId || profile.resume_id;
+            }
+        }
+
+        if (!profile || Object.keys(profile).length === 0) {
+            setStatus("Please upload your resume PDF first.", "error");
+            setLoading(false);
+            return;
+        }
+
+        setStatus("Resume ready! Filling form...", "info");
+
+        // Step 3: Trigger fill form message to content script
+        const fillResponse = await sendFillMessage(profile, resumeId);
+
+        if (!fillResponse) {
+            setStatus("Could not reach page. Please refresh the page.", "error");
+        } else {
+            const { filled, essayCount } = fillResponse;
+            if (essayCount > 0) {
+                setStatus(`${filled} fields filled. Generating ${essayCount} AI answer${essayCount > 1 ? "s" : ""}...`, "info");
+            } else {
+                setStatus(`Done! ${filled} fields filled.`, "success");
+            }
+        }
+
+    } catch (err) {
+        setStatus("Error: " + err.message, "error");
+    } finally {
+        setLoading(false);
+    }
 });
 
 chrome.runtime.onMessage.addListener((message) => {
