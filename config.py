@@ -30,8 +30,4 @@ GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 # The original code connected to the local PostgreSQL instance with these
 # values hardcoded.  They are now read from environment variables with the
 # original values as defaults so the running behaviour is unchanged.
-DB_HOST = os.getenv("DB_HOST", "localhost")
-DB_PORT = os.getenv("DB_PORT", "5432")
-DB_NAME = os.getenv("DB_NAME", "autoforms_db")
-DB_USER = os.getenv("DB_USER", "postgres")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "9689807070")
+DATABASE_URL = os.getenv("DATABASE_URL")
